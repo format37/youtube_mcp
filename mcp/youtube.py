@@ -21,6 +21,10 @@ mcp = FastMCP("youtube")
 
 def download_audio(url):
     output_dir = "data"
+    
+    # Generate a UUID for the filename to avoid filesystem issues with special characters
+    unique_filename = str(uuid.uuid4())
+    
     ydl_opts = {
         'format': 'bestaudio/best',
         'postprocessors': [{
@@ -28,7 +32,7 @@ def download_audio(url):
             'preferredcodec': 'mp3',
             'preferredquality': '128',
         }],
-        'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
+        'outtmpl': os.path.join(output_dir, f'{unique_filename}.%(ext)s'),
         'cookiefile': 'cookies.txt',
     }
 
@@ -39,9 +43,13 @@ def download_audio(url):
         # Modify the info dict to reflect the correct extension after post-processing
         info_with_mp3_ext = dict(info)
         info_with_mp3_ext['ext'] = 'mp3'
+        info_with_mp3_ext['title'] = unique_filename  # Use UUID as title for filename generation
         
         # Get the actual filename that will be used
         actual_filename = ydl.prepare_filename(info_with_mp3_ext)
+        
+        # Log the original video title for reference
+        logger.info(f"Downloaded video: '{info.get('title', 'Unknown')}' as '{actual_filename}'")
         
         return actual_filename
 
