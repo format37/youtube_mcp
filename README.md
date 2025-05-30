@@ -20,7 +20,7 @@ nano .env
 ```
 * Extract your cookies. See [cookies.md](./cookies.md)  
 Place cookies.txt in the ./mcp/ folder.
-* Generate token:
+* Generate MCP_KEY:
 ```
 python token_generator.py
 ```
