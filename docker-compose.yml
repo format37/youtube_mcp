@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  youtube_mcp_main:
+    container_name: youtube_mcp_main
+    # restart: always
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - ./data:/server/data
+    build: mcp
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    network_mode: host
+    environment:
+      - TZ=UTC
+      - CONTAINER_NAME=${CONTAINER_NAME}
+      - PORT=${PORT}
+      - MCP_KEY=${MCP_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}

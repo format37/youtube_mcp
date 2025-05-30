@@ -1,0 +1,6 @@
+yt-dlp==2025.5.22
+fastapi==0.115.12
+uvicorn==0.23.2
+mcp[cli]==1.8.0
+openai==1.58.1
+pydub==0.25.1
