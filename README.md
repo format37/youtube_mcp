@@ -8,7 +8,7 @@ git clone https://github.com/format37/youtube_mcp.git
 cd youtube_mcp
 nano .env
 ```
-* Extract your cookies. Sorry but I don't remember how. Try (this)[https://pypi.org/project/yt-dlp/], search cookies.  
+* Extract your cookies. Unfortunately, I don't remember how. Try [this](https://pypi.org/project/yt-dlp/), search cookies.  
 Place cookies.txt in the ./mcp/ folder.
 * Generate token:
 ```
