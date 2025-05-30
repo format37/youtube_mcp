@@ -103,7 +103,7 @@ def split_audio_ffmpeg(audio_path, chunk_length=10*60):
             current_chunk_length = min(chunk_length, remaining_duration)
             
             # Unique filename for the chunk
-            chunk_filename = f"data/tmp/{uuid.uuid4()}.mp3"
+            chunk_filename = f"/tmp/{uuid.uuid4()}.mp3"
             
             # Use ffmpeg to extract a chunk of the audio - with quotes for paths with spaces
             cmd_extract = f'ffmpeg -ss {start_time} -t {current_chunk_length} -i "{audio_path}" -acodec copy "{chunk_filename}" -y'
