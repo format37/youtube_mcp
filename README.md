@@ -1,6 +1,16 @@
 # youtube_mcp
 Youtube transcribation MCP server
 
+## Demo Video
+
+[![YouTube MCP Demo](https://img.youtube.com/vi/bS5vKuehzEE/maxresdefault.jpg)](https://youtu.be/bS5vKuehzEE)
+
+*Click the image above to watch the demo video*
+
+## Requirements:
+* OpenAI API key
+* Cookies
+
 ## Server installation
 * Clone the repo:
 ```
@@ -8,7 +18,7 @@ git clone https://github.com/format37/youtube_mcp.git
 cd youtube_mcp
 nano .env
 ```
-* Extract your cookies. Unfortunately, I don't remember how. Try [this](https://pypi.org/project/yt-dlp/), search cookies.  
+* Extract your cookies. See [cookies.md](./cookies.md)  
 Place cookies.txt in the ./mcp/ folder.
 * Generate token:
 ```
