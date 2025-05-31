@@ -1,5 +1,7 @@
 import yt_dlp
 import os
+import shutil
+import glob
 from fastapi import FastAPI, HTTPException, Request
 from mcp.server.fastmcp import FastMCP
 import traceback
@@ -24,6 +26,10 @@ def download_audio(url):
     
     # Generate a UUID for the filename to avoid filesystem issues with special characters
     unique_filename = str(uuid.uuid4())
+
+    # Check that cookies.txt exists
+    if not os.path.exists('cookies.txt'):
+        raise Exception("ATTENTION: cookies.txt not found")
     
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -272,6 +278,31 @@ async def transcribe_youtube(url: str) -> list:
         return traceback.format_exc()
     
 app = FastAPI()
+
+@app.on_event("startup")
+async def startup_event():
+    """Clean up data folder on server start"""
+    data_folder = "data"
+    
+    # Create data folder if it doesn't exist
+    if not os.path.exists(data_folder):
+        os.makedirs(data_folder)
+        logger.info(f"Created data folder: {data_folder}")
+    else:
+        # Remove all files in the data folder
+        files = glob.glob(os.path.join(data_folder, "*"))
+        for file_path in files:
+            try:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    logger.info(f"Removed file: {file_path}")
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+                    logger.info(f"Removed directory: {file_path}")
+            except Exception as e:
+                logger.error(f"Error removing {file_path}: {e}")
+        
+        logger.info(f"Cleaned up data folder: {data_folder}")
 
 @app.middleware("http")
 async def validate_api_key(request: Request, call_next):
