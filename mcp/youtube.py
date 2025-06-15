@@ -458,13 +458,13 @@ async def startup_event():
         
         logger.info(f"Cleaned up data folder: {data_folder}")
 
-# @app.middleware("http")
-# async def validate_api_key(request: Request, call_next):
-#     auth_header = request.headers.get("Authorization")
-#     API_KEY = os.environ.get("MCP_KEY")
-#     if auth_header != API_KEY:
-#         raise HTTPException(status_code=401, detail="Invalid API key")
-#     return await call_next(request)
+@app.middleware("http")
+async def validate_api_key(request: Request, call_next):
+    auth_header = request.headers.get("Authorization")
+    API_KEY = os.environ.get("MCP_KEY")
+    if auth_header != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return await call_next(request)
 
 def asgi_sse_wrapper(original_asgi_app):
     async def wrapped_asgi_app(scope, receive, send):
