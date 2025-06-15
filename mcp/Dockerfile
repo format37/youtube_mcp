@@ -11,4 +11,5 @@ COPY entrypoint.sh /server/entrypoint.sh
 RUN chmod +x /server/entrypoint.sh
 COPY cookies.txt /server
 COPY youtube.py /server
-CMD ["/server/entrypoint.sh"]
+# CMD ["/server/entrypoint.sh"]
+CMD ["python", "youtube.py"]

@@ -10,6 +10,8 @@ from pydub import AudioSegment
 import uuid
 from openai import OpenAI
 import csv
+import asyncio
+import uvicorn
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -41,9 +43,11 @@ def get_cached_transcription(url):
                     txt_path = os.path.join("data", f"{uuid_val}.txt")
                     if os.path.exists(txt_path):
                         with open(txt_path, 'r', encoding='utf-8') as f:
+                            logger.info(f"Found cached transcription for {url} (uuid={uuid_val})")
                             return uuid_val, f.read()
     except Exception as e:
         logger.error(f"Error reading cache CSV: {e}")
+    logger.info(f"No cached transcription found for {url}")
     return None, None
 
 def save_transcription_cache(url, uuid_val, transcript):
@@ -58,6 +62,7 @@ def save_transcription_cache(url, uuid_val, transcript):
         with open(TRANSCRIPTIONS_CSV, 'a', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow([url, uuid_val])
+        logger.info(f"Saved transcription to cache for {url} (uuid={uuid_val})")
     except Exception as e:
         logger.error(f"Error saving cache: {e}")
 
@@ -292,6 +297,48 @@ def transcribe_audio(audio_path):
         logger.error(f"{error_msg}")
         return error_msg
 
+def get_video_duration(url):
+    """
+    Get the duration of a YouTube video in seconds using yt_dlp (without downloading).
+    Returns duration in seconds (float) or None if unavailable.
+    """
+    try:
+        with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return float(info.get("duration", 0))
+    except Exception as e:
+        logger.error(f"Error getting video duration: {e}")
+        return None
+
+# Helper for in-progress marker
+IN_PROGRESS_MARKER = os.path.join("data", "in_progress_{uuid}.marker")
+
+def is_transcription_in_progress(uuid_val):
+    return os.path.exists(IN_PROGRESS_MARKER.format(uuid=uuid_val))
+
+def set_transcription_in_progress(uuid_val):
+    with open(IN_PROGRESS_MARKER.format(uuid=uuid_val), 'w') as f:
+        f.write('in progress')
+
+def clear_transcription_in_progress(uuid_val):
+    try:
+        os.remove(IN_PROGRESS_MARKER.format(uuid=uuid_val))
+    except Exception:
+        pass
+
+async def process_transcription(url, uuid_val):
+    """
+    Dedicated coroutine to handle downloading and transcribing in the background.
+    """
+    try:
+        file_path = download_audio(url)
+        transcript = transcribe_audio(file_path)
+        save_transcription_cache(url, uuid_val, transcript)
+    except Exception as e:
+        logger.error(f"Background transcription error: {e}")
+    finally:
+        clear_transcription_in_progress(uuid_val)
+
 @mcp.tool()
 async def transcribe_youtube(url: str) -> list:
     """
@@ -301,7 +348,12 @@ async def transcribe_youtube(url: str) -> list:
         url (str): The URL of the YouTube video to transcribe.
 
     Returns:
-        str: The transcript of the video.
+        list: Always a list. The first element is a status string:
+            - "Success" if transcription is complete, followed by transcript chunks.
+            - Otherwise, a message (e.g., "Transcription in progress, please try again later with the same URL.")
+
+    For long videos (over 10 minutes), transcription is started in the background and a message is returned immediately.
+    Repeated requests with the same URL will return the status until transcription is complete.
     """
     try:
         # Check cache first
@@ -309,28 +361,38 @@ async def transcribe_youtube(url: str) -> list:
         if cached_transcript is not None:
             logger.info(f"Cache hit for {url} (uuid={cached_uuid})")
             chunks = split_text_by_symbols(cached_transcript)
-            return chunks
+            return ["Success"] + chunks
 
-        # Download the video
+        # Get video duration before downloading
+        duration = get_video_duration(url)
+        if duration is None:
+            return ["Could not determine video duration. Please check the URL or try again later."]
+        LONG_VIDEO_THRESHOLD = 10 * 60  # 10 minutes
+        # Generate UUID for this URL (consistent with download_audio)
+        unique_filename = str(uuid.uuid5(uuid.NAMESPACE_URL, url))
+        uuid_val = unique_filename
+        if duration > LONG_VIDEO_THRESHOLD:
+            # If already in progress, return message
+            if is_transcription_in_progress(uuid_val):
+                logger.info(f"Transcription already in progress for {url}")
+                return ["Transcription in progress, please try again later with the same URL."]
+            # Start background task
+            set_transcription_in_progress(uuid_val)
+            asyncio.create_task(process_transcription(url, uuid_val))
+            logger.info(f"Background transcription started for {url}")
+            return ["Transcription in progress, please try again later with the same URL."]
+        # For short videos, process immediately
         file_path = download_audio(url)
         logger.info(f"Downloaded video to {file_path}")
-
-        # Extract uuid from file_path
-        uuid_val = os.path.splitext(os.path.basename(file_path))[0]
-
-        # Transcribe the audio
         transcript = transcribe_audio(file_path)
-
-        # Save to cache
         save_transcription_cache(url, uuid_val, transcript)
-
         chunks = split_text_by_symbols(transcript)
-
-        return chunks
+        logger.info(f"Transcription complete for {url}")
+        return ["Success"] + chunks
     except Exception as e:
         logger.error(f"Error transcribing video: {e}")
-        return traceback.format_exc()
-    
+        return [f"Error: {str(e)}"]
+
 app = FastAPI()
 
 @app.get("/test")
@@ -361,7 +423,7 @@ async def startup_event():
         logger.info(f"Created data folder: {data_folder}")
     else:
         # Remove all files in the data folder
-        files = glob.glob(os.path.join(data_folder, "*"))
+        files = glob.glob(os.path.join(data_folder, "*.mp3"))
         for file_path in files:
             try:
                 if os.path.isfile(file_path):
@@ -383,4 +445,45 @@ async def startup_event():
 #         raise HTTPException(status_code=401, detail="Invalid API key")
 #     return await call_next(request)
 
-app.mount("/", mcp.sse_app())
+def asgi_sse_wrapper(original_asgi_app):
+    async def wrapped_asgi_app(scope, receive, send):
+        has_sent_initial_start = False
+        
+        async def _wrapped_send(message):
+            nonlocal has_sent_initial_start
+            message_type = message['type']
+
+            if message_type == 'http.response.start':
+                if not has_sent_initial_start:
+                    has_sent_initial_start = True
+                    await send(message)  # Allow the first start message
+                else:
+                    # Drop subsequent, erroneous start messages
+                    pass
+            elif message_type == 'http.response.body':
+                # Pass through body messages containing SSE data
+                await send(message)
+            else:
+                # Pass through other message types
+                await send(message)
+        
+        await original_asgi_app(scope, receive, _wrapped_send)
+    return wrapped_asgi_app
+
+app.mount("/", asgi_sse_wrapper(mcp.sse_app()))
+
+def main():
+    """
+    Main function to run the uvicorn server
+    """
+    PORT = int(os.getenv("PORT", "5000"))
+    uvicorn.run(
+        app,  # Pass the app instance directly
+        host="0.0.0.0",
+        port=PORT,
+        log_level="info"
+        # reload=reload_enabled # Consider making this configurable via ENV for development
+    )
+
+if __name__ == "__main__":
+    main()
