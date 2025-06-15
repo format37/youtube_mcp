@@ -498,13 +498,21 @@ def main():
     Main function to run the uvicorn server
     """
     PORT = int(os.getenv("PORT", "5000"))
-    uvicorn.run(
-        app,  # Pass the app instance directly
-        host="0.0.0.0",
-        port=PORT,
-        log_level="info"
-        # reload=reload_enabled # Consider making this configurable via ENV for development
-    )
+    SSL_CERTFILE = os.getenv("SSL_CERTFILE", None)
+    SSL_KEYFILE = os.getenv("SSL_KEYFILE", None)
+
+    uvicorn_kwargs = {
+        "app": app,
+        "host": "0.0.0.0",
+        "port": PORT,
+        "log_level": "info"
+    }
+
+    if SSL_CERTFILE and SSL_KEYFILE:
+        uvicorn_kwargs["ssl_certfile"] = SSL_CERTFILE
+        uvicorn_kwargs["ssl_keyfile"] = SSL_KEYFILE
+
+    uvicorn.run(**uvicorn_kwargs)
 
 if __name__ == "__main__":
     main()

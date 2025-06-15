@@ -7,6 +7,8 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
       - ./data:/server/data
+      - /etc/letsencrypt/live/rtlm.info/fullchain.pem:/server/fullchain.pem:ro
+      - /etc/letsencrypt/live/rtlm.info/privkey.pem:/server/privkey.pem:ro
     build: mcp
     logging:
       options:
@@ -19,3 +21,5 @@ services:
       - PORT=${PORT}
       - MCP_KEY=${MCP_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SSL_CERTFILE=/server/fullchain.pem
+      - SSL_KEYFILE=/server/privkey.pem
