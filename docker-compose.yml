@@ -2,7 +2,7 @@ version: '3.8'
 services:
   youtube_mcp_main:
     container_name: youtube_mcp_main
-    # restart: always
+    restart: always
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro

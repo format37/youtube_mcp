@@ -9,6 +9,7 @@ import logging
 from pydub import AudioSegment
 import uuid
 from openai import OpenAI
+import csv
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -20,6 +21,45 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Initialize FastMCP server
 mcp = FastMCP("youtube")
+
+TRANSCRIPTIONS_CSV = os.path.join("data", "transcriptions.csv")
+
+def get_cached_transcription(url):
+    """
+    Check if the transcription for the given URL exists in the CSV mapping.
+    If found, return the UUID and the transcript text (from uuid.txt).
+    Otherwise, return (None, None).
+    """
+    if not os.path.exists(TRANSCRIPTIONS_CSV):
+        return None, None
+    try:
+        with open(TRANSCRIPTIONS_CSV, newline='', encoding='utf-8') as csvfile:
+            reader = csv.reader(csvfile)
+            for row in reader:
+                if len(row) == 2 and row[0] == url:
+                    uuid_val = row[1]
+                    txt_path = os.path.join("data", f"{uuid_val}.txt")
+                    if os.path.exists(txt_path):
+                        with open(txt_path, 'r', encoding='utf-8') as f:
+                            return uuid_val, f.read()
+    except Exception as e:
+        logger.error(f"Error reading cache CSV: {e}")
+    return None, None
+
+def save_transcription_cache(url, uuid_val, transcript):
+    """
+    Save the link-uuid mapping to the CSV and the transcript to uuid.txt.
+    """
+    txt_path = os.path.join("data", f"{uuid_val}.txt")
+    try:
+        with open(txt_path, 'w', encoding='utf-8') as f:
+            f.write(transcript)
+        # Append to CSV
+        with open(TRANSCRIPTIONS_CSV, 'a', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow([url, uuid_val])
+    except Exception as e:
+        logger.error(f"Error saving cache: {e}")
 
 def download_audio(url):
     output_dir = "data"
@@ -147,7 +187,7 @@ def split_audio_ffmpeg(audio_path, chunk_length=10*60):
         return []
     
 def transcribe_chunk(audio_path):
-    user_lang = 'en'
+    # user_lang = 'en'
     
     try:
         # Check if file exists
@@ -166,13 +206,14 @@ def transcribe_chunk(audio_path):
             
         with open(audio_path, "rb") as audio_file:
             # Add timeout parameters to avoid hanging
-            logger.info(f"Sending chunk to OpenAI API with language: {user_lang}")
+            # logger.info(f"Sending chunk to OpenAI API with language: {user_lang}")
+            logger.info(f"Sending chunk to OpenAI API")
             response = client.audio.transcriptions.create(
                 model="whisper-1", 
                 file=audio_file, 
                 temperature=0,
                 response_format="text",
-                language=user_lang,
+                # language=user_lang,
                 timeout=600  # 10 minute timeout
             )
             
@@ -263,12 +304,25 @@ async def transcribe_youtube(url: str) -> list:
         str: The transcript of the video.
     """
     try:
+        # Check cache first
+        cached_uuid, cached_transcript = get_cached_transcription(url)
+        if cached_transcript is not None:
+            logger.info(f"Cache hit for {url} (uuid={cached_uuid})")
+            chunks = split_text_by_symbols(cached_transcript)
+            return chunks
+
         # Download the video
         file_path = download_audio(url)
         logger.info(f"Downloaded video to {file_path}")
 
+        # Extract uuid from file_path
+        uuid_val = os.path.splitext(os.path.basename(file_path))[0]
+
         # Transcribe the audio
         transcript = transcribe_audio(file_path)
+
+        # Save to cache
+        save_transcription_cache(url, uuid_val, transcript)
 
         chunks = split_text_by_symbols(transcript)
 
@@ -278,6 +332,23 @@ async def transcribe_youtube(url: str) -> list:
         return traceback.format_exc()
     
 app = FastAPI()
+
+@app.get("/test")
+async def test_endpoint():
+    """
+    Test endpoint to verify the server is running.
+    
+    Returns:
+        dict: A simple response indicating the server status.
+    """
+    return {
+        "status": "ok",
+        "message": "YouTube MCP server is running",
+        "endpoints": {
+            "transcribe": "/transcribe_youtube (MCP tool)",
+            "test": "/test"
+        }
+    }
 
 @app.on_event("startup")
 async def startup_event():
@@ -304,12 +375,12 @@ async def startup_event():
         
         logger.info(f"Cleaned up data folder: {data_folder}")
 
-@app.middleware("http")
-async def validate_api_key(request: Request, call_next):
-    auth_header = request.headers.get("Authorization")
-    API_KEY = os.environ.get("MCP_KEY")
-    if auth_header != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    return await call_next(request)
+# @app.middleware("http")
+# async def validate_api_key(request: Request, call_next):
+#     auth_header = request.headers.get("Authorization")
+#     API_KEY = os.environ.get("MCP_KEY")
+#     if auth_header != API_KEY:
+#         raise HTTPException(status_code=401, detail="Invalid API key")
+#     return await call_next(request)
 
 app.mount("/", mcp.sse_app())
