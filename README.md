@@ -63,6 +63,17 @@ Example:
     }
 }
 ```
+## SSL
+Uncomment the following section in the docker-compose.yml to enable SSL:
+```
+      - SSL_CERTFILE=/server/fullchain.pem
+      - SSL_KEYFILE=/server/privkey.pem
+```
+And provide cert files as defined in section:
+```
+      - /etc/letsencrypt/live/rtlm.info/fullchain.pem:/server/fullchain.pem:ro
+      - /etc/letsencrypt/live/rtlm.info/privkey.pem:/server/privkey.pem:ro
+```
 ## Client side
 ```
 4. Restart Claude desktop
