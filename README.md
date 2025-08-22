@@ -1,4 +1,5 @@
 # youtube_mcp
+[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/format37/youtube_mcp)](https://archestra.ai/mcp-catalog/format37__youtube_mcp)
 Youtube transcribation MCP server
 
 ## Demo Video
