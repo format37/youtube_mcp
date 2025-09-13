@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/format37-youtube-mcp-badge.png)](https://mseep.ai/app/format37-youtube-mcp)
+
 # youtube_mcp
 Youtube transcribation MCP server
 
