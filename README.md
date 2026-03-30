@@ -67,3 +67,8 @@ Example:
 ```
 4. Restart Claude desktop
 5. Check that tws tools are listed in the tools list. Ask Claude to check ibkr account
+
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/format37-youtube-mcp).
+
